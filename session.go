@@ -18,25 +18,14 @@ import (
 const Version = "3.1.4"
 
 var (
-	ErrInvalidSessionID = errors.New("Invalid session id")
+	ErrInvalidSessionID = errors.New("invalid session id")
 )
 
 // Define the handler to get the session id
 type IDHandlerFunc func(context.Context) string
 
 // Define default options
-var defaultOptions = options{
-	cookieName:     "go_session_id",
-	cookieLifeTime: 3600 * 24 * 7,
-	expired:        7200,
-	secure:         true,
-	sameSite:       http.SameSiteDefaultMode,
-	sessionID: func(_ context.Context) string {
-		return newUUID()
-	},
-	enableSetCookie:     true,
-	enableSIDInURLQuery: true,
-}
+var defaultOptions options
 
 type options struct {
 	sign                    []byte
@@ -52,6 +41,22 @@ type options struct {
 	enableSIDInHTTPHeader   bool
 	sessionNameInHTTPHeader string
 	store                   ManagerStore
+}
+
+func init() {
+	defaultOptions = options{
+		cookieName:     "session",
+		cookieLifeTime: 3600 * 24 * 7,
+		expired:        7200,
+		secure:         false,
+		sameSite:       http.SameSiteDefaultMode,
+		sessionID: func(_ context.Context) string {
+			return newUUID()
+		},
+		enableSetCookie:     true,
+		enableSIDInURLQuery: true,
+	}
+	defaultOptions.sessionNameInHTTPHeader = defaultOptions.cookieName
 }
 
 type Option func(*options)
@@ -149,6 +154,11 @@ func SetStore(store ManagerStore) Option {
 	}
 }
 
+// A session management instance, including start and destroy operations
+type Manager struct {
+	opts *options
+}
+
 // Create a session management instance
 func NewManager(opt ...Option) *Manager {
 	opts := defaultOptions
@@ -164,11 +174,6 @@ func NewManager(opt ...Option) *Manager {
 		opts.store = NewMemoryStore()
 	}
 	return &Manager{opts: &opts}
-}
-
-// A session management instance, including start and destroy operations
-type Manager struct {
-	opts *options
 }
 
 func (m *Manager) getContext(ctx context.Context, w http.ResponseWriter, r *http.Request) context.Context {
@@ -220,16 +225,16 @@ func (m *Manager) sessionID(r *http.Request) (string, error) {
 		}
 	}
 
+	if m.opts.enableSIDInHTTPHeader && cookieValue == "" {
+		cookieValue = r.Header.Get(m.opts.sessionNameInHTTPHeader)
+	}
+
 	if m.opts.enableSIDInURLQuery && cookieValue == "" {
 		err := r.ParseForm()
 		if err != nil {
 			return "", err
 		}
 		cookieValue = r.FormValue(m.opts.cookieName)
-	}
-
-	if m.opts.enableSIDInHTTPHeader && cookieValue == "" {
-		cookieValue = r.Header.Get(m.opts.sessionNameInHTTPHeader)
 	}
 
 	if cookieValue != "" {
