@@ -1,4 +1,4 @@
-module github.com/go-session/session/v3
+module github.com/marifcelik/go-session
 
 go 1.17
 
